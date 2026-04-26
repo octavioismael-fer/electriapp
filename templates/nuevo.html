@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="topbar">
+  <a href="/" class="back-btn">← Volver</a>
+  <h1>Nuevo trabajo</h1>
+</div>
+
+<div class="content">
+  <form method="POST" action="/nuevo">
+    <div class="field">
+      <label>Cliente *</label>
+      <input type="text" name="cliente" id="campo-cliente"
+             placeholder="Nombre del cliente"
+             autocomplete="off" required>
+      <div id="sugerencias"></div>
+    </div>
+
+    <div class="field">
+      <label>Descripción *</label>
+      <textarea name="descripcion" placeholder="Ej: Instalación de tomacorriente, reparación tablero..." required></textarea>
+    </div>
+
+    <div class="field">
+      <label>Monto ($)</label>
+      <input type="number" name="monto" placeholder="0" min="0" step="0.01" inputmode="decimal">
+    </div>
+
+    <div class="field">
+      <label>Fecha</label>
+      <input type="date" name="fecha" value="{{ hoy }}" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px">
+      💾 Guardar trabajo
+    </button>
+  </form>
+</div>
+
+<script>
+const clientes = {{ clientes | tojson }};
+const input = document.getElementById('campo-cliente');
+const sugerencias = document.getElementById('sugerencias');
+
+input.addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  sugerencias.innerHTML = '';
+  if (q.length < 2) { sugerencias.style.display = 'none'; return; }
+  const matches = clientes.filter(c => c.toLowerCase().includes(q)).slice(0, 4);
+  if (matches.length === 0) { sugerencias.style.display = 'none'; return; }
+  matches.forEach(nombre => {
+    const div = document.createElement('div');
+    div.className = 'sugerencia';
+    div.textContent = nombre;
+    div.onclick = () => { input.value = nombre; sugerencias.style.display = 'none'; };
+    sugerencias.appendChild(div);
+  });
+  sugerencias.style.display = 'block';
+});
+
+document.addEventListener('click', e => {
+  if (!sugerencias.contains(e.target) && e.target !== input) {
+    sugerencias.style.display = 'none';
+  }
+});
+</script>
+{% endblock %}

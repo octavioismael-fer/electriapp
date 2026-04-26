@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="topbar">
+  <a href="/" class="back-btn">← Volver</a>
+  <h1>{{ cliente.nombre }}</h1>
+</div>
+
+<div class="content">
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="card-label">Total acumulado</div>
+        <div class="card-value" style="color:#22c55e">${{ "{:,.0f}".format(total) }}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="card-label">Trabajos</div>
+        <div class="card-value" style="color:#f59e0b">{{ trabajos|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:13px;color:#94a3b8;font-weight:600;margin-bottom:10px">
+    Historial de trabajos
+  </div>
+
+  {% for t in trabajos %}
+  <div class="trabajo-item">
+    <div class="trabajo-fecha">{{ t.fecha.strftime('%d/%m/%y') }}</div>
+    <div class="trabajo-info">
+      <div class="trabajo-desc" style="color:#f1f5f9">{{ t.descripcion }}</div>
+    </div>
+    <div class="trabajo-monto">${{ "{:,.0f}".format(t.monto) }}</div>
+  </div>
+  {% else %}
+  <div class="empty">
+    <div>Sin trabajos registrados</div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
