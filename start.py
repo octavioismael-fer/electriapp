@@ -1,9 +1,16 @@
 import sys, os
-# Aseguramos que Python encuentre los modulos
-ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, ROOT)
 
-# Ahora si importamos
+# Render corre desde /opt/render/project/src/
+# Los archivos estan en ese mismo directorio
+# Agregamos todas las posibles rutas
+here = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, here)
+sys.path.insert(0, os.path.dirname(here))
+sys.path.insert(0, "/opt/render/project/src")
+
+print("Python path:", sys.path[:4])
+print("Archivos en directorio:", os.listdir(here))
+
 from electriapp.database.connection import init_db
 from electriapp._seed import sembrar
 from electriapp.views.vista_inicio import vista_inicio
