@@ -1,7 +1,9 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sys, os
+# Aseguramos que Python encuentre los modulos
+ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, ROOT)
 
+# Ahora si importamos
 from electriapp.database.connection import init_db
 from electriapp._seed import sembrar
 from electriapp.views.vista_inicio import vista_inicio
@@ -16,15 +18,12 @@ def main(page: ft.Page):
     page.bgcolor = BG
     page.padding = 0
     page.theme_mode = ft.ThemeMode.DARK
-
     contenedor = ft.Column(expand=True, spacing=0)
     page.add(contenedor)
 
-    def ir_a(ruta: str, params: dict):
+    def ir_a(ruta, params):
         contenedor.controls.clear()
-        if ruta == "inicio":
-            vista = vista_inicio(page, ir_a)
-        elif ruta == "nuevo":
+        if ruta == "nuevo":
             vista = vista_nuevo_trabajo(page, ir_a, params)
         elif ruta == "cliente":
             vista = vista_cliente(page, ir_a, params)
@@ -35,13 +34,7 @@ def main(page: ft.Page):
 
     ir_a("inicio", {})
 
-if __name__ == "__main__":
-    init_db()
-    sembrar()
-    port = int(os.environ.get("PORT", 8080))
-    ft.app(
-        target=main,
-        view=ft.AppView.WEB_BROWSER,
-        port=port,
-        host="0.0.0.0",
-    )
+init_db()
+sembrar()
+port = int(os.environ.get("PORT", 8080))
+ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port, host="0.0.0.0")
