@@ -2,7 +2,7 @@ services:
   - type: web
     name: electriapp
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: python -m electriapp.main
     envVars:
       - key: PORT
