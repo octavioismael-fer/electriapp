@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: electriapp
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m electriapp.main
+    envVars:
+      - key: PORT
+        value: 8080
+    disk:
+      name: datos
+      mountPath: /opt/render/project/src
+      sizeGB: 1
