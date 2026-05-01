@@ -1,13 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
+from datetime import datetime
 import os
 
 app = Flask(__name__)
 
-# ── Base de datos ─────────────────────────────────────────────────────────
+# Base de datos
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "electriapp.db")
 engine = create_engine(f"sqlite:///{DB_PATH}")
 Session = sessionmaker(bind=engine)
@@ -34,14 +33,21 @@ class Trabajo(Base):
 
 Base.metadata.create_all(engine)
 
-# ── Helpers ───────────────────────────────────────────────────────────────
 MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
          "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 
 def get_session():
     return Session()
 
-# ── Rutas ─────────────────────────────────────────────────────────────────
+def buscar_o_crear_cliente(session, nombre):
+    """Busca un cliente por nombre (sin importar mayúsculas) o lo crea si no existe."""
+    nombre = nombre.strip().title()
+    cliente = session.query(Cliente).filter(Cliente.nombre.ilike(nombre)).first()
+    if not cliente:
+        cliente = Cliente(nombre=nombre)
+        session.add(cliente)
+        session.flush()
+    return cliente
 
 @app.route("/")
 def index():
@@ -59,7 +65,6 @@ def index():
 
     total = sum(t.monto for t in trabajos)
 
-    # Resumen por cliente
     resumen = {}
     for t in trabajos:
         cid = t.cliente_id
@@ -68,15 +73,10 @@ def index():
         resumen[cid]["total"] += t.monto
         resumen[cid]["cantidad"] += 1
 
-    # Navegacion de mes
-    if mes == 1:
-        mes_ant, anio_ant = 12, anio - 1
-    else:
-        mes_ant, anio_ant = mes - 1, anio
-    if mes == 12:
-        mes_sig, anio_sig = 1, anio + 1
-    else:
-        mes_sig, anio_sig = mes + 1, anio
+    mes_ant = 12 if mes == 1 else mes - 1
+    anio_ant = anio - 1 if mes == 1 else anio
+    mes_sig = 1 if mes == 12 else mes + 1
+    anio_sig = anio + 1 if mes == 12 else anio
 
     session.close()
     return render_template("index.html",
@@ -93,27 +93,32 @@ def nuevo():
         nombre_cliente = request.form["cliente"].strip().title()
         descripcion = request.form["descripcion"].strip()
         monto = float(request.form["monto"] or 0)
-        fecha_str = request.form["fecha"]
-        fecha = datetime.strptime(fecha_str, "%Y-%m-%d")
+        fecha = datetime.strptime(request.form["fecha"], "%Y-%m-%d")
 
-        cliente = session.query(Cliente).filter(
-            Cliente.nombre.ilike(nombre_cliente)).first()
-        if not cliente:
-            cliente = Cliente(nombre=nombre_cliente)
-            session.add(cliente)
-            session.flush()
+        try:
+            cliente = buscar_o_crear_cliente(session, nombre_cliente)
+            trabajo = Trabajo(cliente_id=cliente.id, descripcion=descripcion,
+                              monto=monto, fecha=fecha)
+            session.add(trabajo)
+            session.commit()
+        except Exception:
+            session.rollback()
+            # Reintentar buscando el cliente que ya existe
+            cliente = session.query(Cliente).filter(
+                Cliente.nombre.ilike(nombre_cliente)).first()
+            if cliente:
+                trabajo = Trabajo(cliente_id=cliente.id, descripcion=descripcion,
+                                  monto=monto, fecha=fecha)
+                session.add(trabajo)
+                session.commit()
+        finally:
+            session.close()
 
-        trabajo = Trabajo(cliente_id=cliente.id, descripcion=descripcion,
-                          monto=monto, fecha=fecha)
-        session.add(trabajo)
-        session.commit()
-        session.close()
         return redirect(url_for("index", mes=fecha.month, anio=fecha.year))
 
     clientes = [c.nombre for c in session.query(Cliente).order_by(Cliente.nombre).all()]
     session.close()
-    hoy = datetime.now().strftime("%Y-%m-%d")
-    return render_template("nuevo.html", clientes=clientes, hoy=hoy)
+    return render_template("nuevo.html", clientes=clientes, hoy=datetime.now().strftime("%Y-%m-%d"))
 
 
 @app.route("/cliente/<int:cliente_id>")
@@ -132,8 +137,7 @@ def cliente(cliente_id):
 def eliminar(trabajo_id):
     session = get_session()
     t = session.query(Trabajo).filter(Trabajo.id == trabajo_id).first()
-    mes = t.fecha.month
-    anio = t.fecha.year
+    mes, anio = t.fecha.month, t.fecha.year
     session.delete(t)
     session.commit()
     session.close()
@@ -143,7 +147,7 @@ def eliminar(trabajo_id):
 @app.route("/api/clientes")
 def api_clientes():
     session = get_session()
-    q = request.args.get("q", "").lower()
+    q = request.args.get("q", "")
     clientes = session.query(Cliente).filter(
         Cliente.nombre.ilike(f"%{q}%")).limit(5).all()
     session.close()
