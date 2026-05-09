@@ -37,6 +37,11 @@
     🔔 Probar notificación AHORA
   </button>
 
+  <button class="btn btn-block" onclick="forzarVerificacion()"
+    style="background:#1a1000;color:#f59e0b;border:1px solid #f59e0b44;margin-bottom:10px">
+    🔄 Forzar verificación de tareas
+  </button>
+
   <button class="btn btn-block" onclick="location.reload()"
     style="background:#334155;color:#f1f5f9;margin-bottom:10px">
     🔄 Volver a verificar
@@ -177,6 +182,18 @@ async function testNotificacion() {
   } catch(e) {
     addLog('Error al enviar prueba: ' + e.message);
     alert('Error: ' + e.message);
+  }
+}
+
+async function forzarVerificacion() {
+  addLog('Forzando verificación manual de tareas...');
+  // Hacemos un fetch para "despertar" el SW
+  try {
+    await fetch('/api/tareas-pendientes');
+    addLog('Fetch realizado — el SW debería verificar ahora');
+    alert('Verificación forzada. Si hay una tarea en los próximos 15 min, la notificación debería aparecer.');
+  } catch(e) {
+    addLog('Error: ' + e.message);
   }
 }
 

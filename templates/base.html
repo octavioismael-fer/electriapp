@@ -166,46 +166,14 @@
 // ── Registro del Service Worker ──
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js', { scope: '/' })
-    .then(reg => {
-      console.log('SW registrado');
-      programarNotificaciones();
+    .then(async reg => {
+      console.log('SW registrado, scope:', reg.scope);
+      // Pedimos permiso de notificaciones si no se dio aún
+      if ('Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
     })
     .catch(err => console.log('SW error:', err));
-}
-
-// ── Pedir permiso y programar notificaciones ──
-async function programarNotificaciones() {
-  if (!('Notification' in window)) return;
-
-  // Pedimos permiso si todavía no se dio
-  if (Notification.permission === 'default') {
-    await Notification.requestPermission();
-  }
-  if (Notification.permission !== 'granted') return;
-
-  // Traemos las tareas pendientes del servidor
-  try {
-    const res = await fetch('/api/tareas-pendientes');
-    const tareas = await res.json();
-    const sw = await navigator.serviceWorker.ready;
-
-    tareas.forEach(t => {
-      const fechaTarea = new Date(t.tarea_datetime);
-      // Notificamos 15 minutos antes
-      const cuando = fechaTarea.getTime() - 15 * 60 * 1000;
-      if (cuando > Date.now()) {
-        sw.active.postMessage({
-          tipo: 'programar',
-          id: t.id,
-          titulo: `⚡ ElectriApp — ${t.cliente}`,
-          cuerpo: `En 15 min: ${t.descripcion}`,
-          cuando
-        });
-      }
-    });
-  } catch(e) {
-    console.log('Error programando notificaciones:', e);
-  }
 }
 </script>
 </body>
