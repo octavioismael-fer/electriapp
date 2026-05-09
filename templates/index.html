@@ -48,43 +48,52 @@
   </div>
   {% endif %}
 
-  <!-- Lista de trabajos -->
-  {% if trabajos %}
-    {% for t in trabajos %}
-    <div class="trabajo-item">
-      <div class="trabajo-fecha">{{ t.fecha.strftime('%d/%m') }}</div>
-      <div class="trabajo-info">
-        <div class="trabajo-cliente">{{ t.cliente.nombre }}</div>
-        <div class="trabajo-desc">{{ t.descripcion }}</div>
-        <!-- NUEVO: badge de estado -->
-        <button
-          class="badge-pago {% if t.pagado %}pagado{% else %}debe{% endif %}"
-          onclick="togglePago({{ t.id }}, this)"
-          title="Tocá para cambiar estado">
-          {% if t.pagado %}✓ Cobrado{% else %}⏳ Debe{% endif %}
-        </button>
+  <!-- Lista individual: solo en "Todos" -->
+  {% if filtro == 'todos' %}
+    {% if trabajos %}
+      {% for t in trabajos %}
+      <div class="trabajo-item">
+        <div class="trabajo-fecha">{{ t.fecha.strftime('%d/%m') }}</div>
+        <div class="trabajo-info">
+          <div class="trabajo-cliente">{{ t.cliente.nombre }}</div>
+          <div class="trabajo-desc">{{ t.descripcion }}</div>
+          <button
+            class="badge-pago {% if t.pagado %}pagado{% else %}debe{% endif %}"
+            onclick="togglePago({{ t.id }}, this)"
+            title="Tocá para cambiar estado">
+            {% if t.pagado %}✓ Cobrado{% else %}⏳ Debe{% endif %}
+          </button>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <div class="trabajo-monto {% if t.pagado %}monto-pagado{% else %}monto-debe{% endif %}">
+            ${{ "{:,.0f}".format(t.monto) }}
+          </div>
+          <form method="POST" action="/eliminar/{{ t.id }}"
+                onsubmit="return confirm('¿Eliminar este trabajo?')">
+            <button type="submit" style="background:none;border:none;color:#ef4444;font-size:18px;cursor:pointer;">🗑</button>
+          </form>
+        </div>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-        <div class="trabajo-monto">${{ "{:,.0f}".format(t.monto) }}</div>
-        <form method="POST" action="/eliminar/{{ t.id }}"
-              onsubmit="return confirm('¿Eliminar este trabajo?')">
-          <button type="submit" style="background:none;border:none;color:#ef4444;font-size:18px;cursor:pointer;">🗑</button>
-        </form>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-  <div class="empty">
-    <div class="icon">⚡</div>
-    {% if filtro == 'pagados' %}
-      <div>Sin trabajos cobrados este mes</div>
-    {% elif filtro == 'deben' %}
-      <div>Sin deudas pendientes 🎉</div>
+      {% endfor %}
     {% else %}
+    <div class="empty">
+      <div class="icon">⚡</div>
       <div>Sin trabajos este mes</div>
       <div style="font-size:13px;margin-top:6px">Tocá + para agregar el primero</div>
+    </div>
     {% endif %}
-  </div>
+  {% else %}
+    <!-- Cobrados / Deben: solo resumen por cliente, sin lista individual -->
+    {% if not resumen %}
+    <div class="empty">
+      <div class="icon">⚡</div>
+      {% if filtro == 'pagados' %}
+        <div>Sin trabajos cobrados este mes</div>
+      {% else %}
+        <div>Sin deudas pendientes 🎉</div>
+      {% endif %}
+    </div>
+    {% endif %}
   {% endif %}
 </div>
 
@@ -126,6 +135,10 @@
   background: #2d0a0a;
 }
 
+/* Color del monto según estado */
+.monto-pagado { color: #22c55e; }
+.monto-debe   { color: #ef4444; }
+
 /* Badge de pago (clickeable) */
 .badge-pago {
   display: inline-block;
@@ -153,17 +166,18 @@
 </style>
 
 <script>
-// Toggle de pago directo desde la lista, sin recargar la página
 async function togglePago(id, btn) {
   try {
     const res = await fetch(`/toggle-pago/${id}`, { method: 'POST' });
     const data = await res.json();
-    if (data.pagado) {
-      btn.className = 'badge-pago pagado';
-      btn.textContent = '✓ Cobrado';
-    } else {
-      btn.className = 'badge-pago debe';
-      btn.textContent = '⏳ Debe';
+    // Actualizamos badge
+    const pagado = data.pagado;
+    btn.className = pagado ? 'badge-pago pagado' : 'badge-pago debe';
+    btn.textContent = pagado ? '✓ Cobrado' : '⏳ Debe';
+    // Actualizamos color del monto
+    const montoEl = btn.closest('.trabajo-item').querySelector('.trabajo-monto');
+    if (montoEl) {
+      montoEl.className = pagado ? 'trabajo-monto monto-pagado' : 'trabajo-monto monto-debe';
     }
   } catch(e) {
     alert('Error al actualizar. Intentá de nuevo.');

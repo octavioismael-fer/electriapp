@@ -71,13 +71,9 @@ def index():
     trabajos = query.all()
     total = sum(t.monto for t in trabajos)
 
-    # Para el resumen usamos siempre todos (sin filtro)
-    todos = (session.query(Trabajo)
-             .options(joinedload(Trabajo.cliente))
-             .filter(Trabajo.fecha >= inicio, Trabajo.fecha < fin)
-             .all())
+    # Resumen por cliente respetando el filtro activo
     resumen = {}
-    for t in todos:
+    for t in trabajos:
         cid = t.cliente_id
         if cid not in resumen:
             resumen[cid] = {"nombre": t.cliente.nombre, "total": 0, "cantidad": 0, "id": cid}
