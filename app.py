@@ -231,6 +231,10 @@ def api_tareas_pendientes():
     session.close()
     return jsonify(result)
 
+@app.route("/debug")
+def debug():
+    return render_template("debug.html")
+
 @app.route("/api/clientes")
 def api_clientes():
     session = get_session()

@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="topbar">
+  <a href="/" class="back-btn">← Volver</a>
+  <h1>Diagnóstico</h1>
+</div>
+
+<div class="content">
+
+  <div class="card" id="card-sw" style="margin-bottom:10px">
+    <div class="card-label">Service Worker</div>
+    <div id="sw-status" style="font-size:15px;margin-top:6px;color:#94a3b8">Verificando...</div>
+  </div>
+
+  <div class="card" id="card-notif" style="margin-bottom:10px">
+    <div class="card-label">Permisos de notificación</div>
+    <div id="notif-status" style="font-size:15px;margin-top:6px;color:#94a3b8">Verificando...</div>
+  </div>
+
+  <div class="card" id="card-tareas" style="margin-bottom:10px">
+    <div class="card-label">Tareas pendientes encontradas</div>
+    <div id="tareas-status" style="font-size:15px;margin-top:6px;color:#94a3b8">Verificando...</div>
+  </div>
+
+  <div class="card" id="card-msg" style="margin-bottom:10px">
+    <div class="card-label">Mensaje enviado al SW</div>
+    <div id="msg-status" style="font-size:15px;margin-top:6px;color:#94a3b8">Esperando...</div>
+  </div>
+
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-label">Log detallado</div>
+    <pre id="log" style="font-size:11px;color:#94a3b8;margin-top:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto"></pre>
+  </div>
+
+  <!-- Botón para mandar notificación de prueba ahora -->
+  <button class="btn btn-primary btn-block" onclick="testNotificacion()" style="margin-bottom:10px">
+    🔔 Probar notificación AHORA
+  </button>
+
+  <button class="btn btn-block" onclick="location.reload()"
+    style="background:#334155;color:#f1f5f9;margin-bottom:10px">
+    🔄 Volver a verificar
+  </button>
+
+</div>
+
+<style>
+  .ok   { color: #22c55e; font-weight: 700; }
+  .fail { color: #ef4444; font-weight: 700; }
+  .warn { color: #f59e0b; font-weight: 700; }
+</style>
+
+<script>
+const log = document.getElementById('log');
+function addLog(msg) {
+  log.textContent += new Date().toLocaleTimeString() + ' → ' + msg + '\n';
+}
+
+async function diagnosticar() {
+  // 1. Service Worker
+  const swEl = document.getElementById('sw-status');
+  if (!('serviceWorker' in navigator)) {
+    swEl.innerHTML = '<span class="fail">❌ No soportado en este navegador</span>';
+    addLog('SW: no soportado');
+  } else {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/static/sw.js');
+      if (reg) {
+        const estado = reg.active ? 'activo' : reg.installing ? 'instalando' : reg.waiting ? 'esperando' : 'registrado sin activar';
+        swEl.innerHTML = `<span class="ok">✅ Registrado (${estado})</span>`;
+        addLog('SW: registrado, estado=' + estado);
+        addLog('SW scope: ' + reg.scope);
+      } else {
+        // Intentar registrar
+        addLog('SW: no registrado, intentando registrar...');
+        const newReg = await navigator.serviceWorker.register('/static/sw.js');
+        swEl.innerHTML = '<span class="warn">⚠️ No estaba registrado — se registró ahora. Recargá la página.</span>';
+        addLog('SW: registrado ahora en scope ' + newReg.scope);
+      }
+    } catch(e) {
+      swEl.innerHTML = '<span class="fail">❌ Error: ' + e.message + '</span>';
+      addLog('SW error: ' + e.message);
+    }
+  }
+
+  // 2. Permisos
+  const notifEl = document.getElementById('notif-status');
+  if (!('Notification' in window)) {
+    notifEl.innerHTML = '<span class="fail">❌ No soportado</span>';
+    addLog('Notificaciones: no soportadas');
+  } else {
+    const perm = Notification.permission;
+    if (perm === 'granted') {
+      notifEl.innerHTML = '<span class="ok">✅ Concedido</span>';
+    } else if (perm === 'denied') {
+      notifEl.innerHTML = '<span class="fail">❌ Bloqueado — ir a Ajustes del teléfono para habilitarlo</span>';
+    } else {
+      notifEl.innerHTML = '<span class="warn">⚠️ No pedido aún — tocá "Probar notificación" para solicitarlo</span>';
+    }
+    addLog('Notificaciones: permission=' + perm);
+  }
+
+  // 3. Tareas pendientes
+  const tareasEl = document.getElementById('tareas-status');
+  try {
+    const res = await fetch('/api/tareas-pendientes');
+    const tareas = await res.json();
+    if (tareas.length === 0) {
+      tareasEl.innerHTML = '<span class="warn">⚠️ No hay tareas pendientes cargadas</span>';
+      addLog('Tareas: 0 encontradas');
+    } else {
+      tareasEl.innerHTML = `<span class="ok">✅ ${tareas.length} tarea(s) encontrada(s)</span>`;
+      tareas.forEach(t => {
+        const dt = new Date(t.tarea_datetime);
+        const ahora = Date.now();
+        const diff = dt.getTime() - ahora;
+        const diffMin = Math.round(diff / 60000);
+        addLog(`Tarea #${t.id}: ${t.cliente} — ${t.descripcion}`);
+        addLog(`  → programada para ${dt.toLocaleString()}`);
+        addLog(`  → en ${diffMin} minutos`);
+        addLog(`  → notificación saldría en ${diffMin - 15} minutos (15 min antes)`);
+      });
+
+      // 4. Enviar al SW
+      const msgEl = document.getElementById('msg-status');
+      try {
+        const sw = await navigator.serviceWorker.ready;
+        if (sw.active) {
+          tareas.forEach(t => {
+            const cuando = new Date(t.tarea_datetime).getTime() - 15 * 60 * 1000;
+            const demora = cuando - Date.now();
+            sw.active.postMessage({
+              tipo: 'programar',
+              id: t.id,
+              titulo: `⚡ ElectriApp — ${t.cliente}`,
+              cuerpo: `En 15 min: ${t.descripcion}`,
+              cuando
+            });
+            addLog(`Mensaje enviado al SW para tarea #${t.id}, demora=${Math.round(demora/1000)}s`);
+          });
+          msgEl.innerHTML = `<span class="ok">✅ Enviado para ${tareas.length} tarea(s)</span>`;
+        } else {
+          msgEl.innerHTML = '<span class="fail">❌ SW no está activo para recibir mensajes</span>';
+          addLog('SW no activo al intentar enviar mensaje');
+        }
+      } catch(e) {
+        msgEl.innerHTML = '<span class="fail">❌ Error enviando al SW: ' + e.message + '</span>';
+        addLog('Error postMessage: ' + e.message);
+      }
+    }
+  } catch(e) {
+    tareasEl.innerHTML = '<span class="fail">❌ Error consultando tareas: ' + e.message + '</span>';
+    addLog('Error /api/tareas-pendientes: ' + e.message);
+  }
+}
+
+// Notificación de prueba instantánea
+async function testNotificacion() {
+  if (Notification.permission !== 'granted') {
+    const perm = await Notification.requestPermission();
+    addLog('Permiso solicitado: ' + perm);
+    if (perm !== 'granted') {
+      alert('Permiso denegado. Habilitalo en Ajustes del teléfono.');
+      return;
+    }
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification('⚡ ElectriApp — Prueba', {
+      body: 'Las notificaciones están funcionando correctamente ✅',
+      icon: '/static/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: 'test'
+    });
+    addLog('Notificación de prueba enviada OK');
+    document.getElementById('msg-status').innerHTML = '<span class="ok">✅ Notificación de prueba enviada — ¿la viste?</span>';
+  } catch(e) {
+    addLog('Error al enviar prueba: ' + e.message);
+    alert('Error: ' + e.message);
+  }
+}
+
+// Arrancar diagnóstico al cargar
+diagnosticar();
+</script>
+{% endblock %}
