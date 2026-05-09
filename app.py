@@ -7,8 +7,13 @@ import os
 app = Flask(__name__)
 
 # Base de datos
+<<<<<<< HEAD
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "electriapp.db")
 engine = create_engine(f"sqlite:///{DB_PATH}")
+=======
+DATABASE_URL = os.environ.get("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
+>>>>>>> 9567562 (Nuevos cambios deploy vercel)
 Session = sessionmaker(bind=engine)
 
 class Base(DeclarativeBase):
@@ -103,7 +108,10 @@ def nuevo():
             session.commit()
         except Exception:
             session.rollback()
+<<<<<<< HEAD
             # Reintentar buscando el cliente que ya existe
+=======
+>>>>>>> 9567562 (Nuevos cambios deploy vercel)
             cliente = session.query(Cliente).filter(
                 Cliente.nombre.ilike(nombre_cliente)).first()
             if cliente:
@@ -156,4 +164,8 @@ def api_clientes():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+<<<<<<< HEAD
     app.run(host="0.0.0.0", port=port, debug=False)
+=======
+    app.run(host="0.0.0.0", port=port, debug=False)
+>>>>>>> 9567562 (Nuevos cambios deploy vercel)
