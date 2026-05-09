@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
-from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship
+from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship, joinedload
 from datetime import datetime
 import os
 
@@ -55,6 +55,7 @@ def index():
     fin = datetime(anio, mes+1, 1) if mes < 12 else datetime(anio+1, 1, 1)
 
     trabajos = (session.query(Trabajo)
+                .options(joinedload(Trabajo.cliente))
                 .filter(Trabajo.fecha >= inicio, Trabajo.fecha < fin)
                 .order_by(Trabajo.fecha.desc()).all())
 
@@ -120,6 +121,7 @@ def cliente(cliente_id):
     session = get_session()
     c = session.query(Cliente).filter(Cliente.id == cliente_id).first()
     trabajos = (session.query(Trabajo)
+                .options(joinedload(Trabajo.cliente))
                 .filter(Trabajo.cliente_id == cliente_id)
                 .order_by(Trabajo.fecha.desc()).all())
     total = sum(t.monto for t in trabajos)
