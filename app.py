@@ -25,7 +25,10 @@ class Trabajo(Base):
     descripcion = Column(String(500), nullable=False)
     monto = Column(Float, nullable=False, default=0.0)
     fecha = Column(DateTime, nullable=False, default=datetime.now)
-    pagado = Column(Boolean, nullable=False, default=False)   # ← NUEVO
+    pagado = Column(Boolean, nullable=False, default=False)
+    es_tarea = Column(Boolean, nullable=False, default=False)
+    tarea_datetime = Column(DateTime, nullable=True)
+    tarea_hecha = Column(Boolean, nullable=False, default=False)
     cliente = relationship("Cliente", back_populates="trabajos")
 
 MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
@@ -51,7 +54,7 @@ def index():
     ahora = datetime.now()
     mes = int(request.args.get("mes", ahora.month))
     anio = int(request.args.get("anio", ahora.year))
-    filtro = request.args.get("filtro", "todos")  # ← NUEVO: todos / pagados / deben
+    filtro = request.args.get("filtro", "todos")
 
     session = get_session()
     inicio = datetime(anio, mes, 1)
@@ -62,7 +65,6 @@ def index():
              .filter(Trabajo.fecha >= inicio, Trabajo.fecha < fin)
              .order_by(Trabajo.fecha.desc()))
 
-    # ← NUEVO: aplicar filtro de pago
     if filtro == "pagados":
         query = query.filter(Trabajo.pagado == True)
     elif filtro == "deben":
@@ -71,7 +73,6 @@ def index():
     trabajos = query.all()
     total = sum(t.monto for t in trabajos)
 
-    # Resumen por cliente respetando el filtro activo
     resumen = {}
     for t in trabajos:
         cid = t.cliente_id
@@ -79,6 +80,14 @@ def index():
             resumen[cid] = {"nombre": t.cliente.nombre, "total": 0, "cantidad": 0, "id": cid}
         resumen[cid]["total"] += t.monto
         resumen[cid]["cantidad"] += 1
+
+    tareas_pendientes = (session.query(Trabajo)
+                         .options(joinedload(Trabajo.cliente))
+                         .filter(Trabajo.es_tarea == True,
+                                 Trabajo.tarea_hecha == False,
+                                 Trabajo.tarea_datetime != None)
+                         .order_by(Trabajo.tarea_datetime.asc())
+                         .all())
 
     mes_ant = 12 if mes == 1 else mes - 1
     anio_ant = anio - 1 if mes == 1 else anio
@@ -91,7 +100,8 @@ def index():
                            mes=mes, anio=anio, nombre_mes=MESES[mes-1],
                            mes_ant=mes_ant, anio_ant=anio_ant,
                            mes_sig=mes_sig, anio_sig=anio_sig,
-                           filtro=filtro)  # ← NUEVO
+                           filtro=filtro,
+                           tareas_pendientes=tareas_pendientes)
 
 @app.route("/nuevo", methods=["GET", "POST"])
 def nuevo():
@@ -101,12 +111,29 @@ def nuevo():
         descripcion = request.form["descripcion"].strip()
         monto = float(request.form["monto"] or 0)
         fecha = datetime.strptime(request.form["fecha"], "%Y-%m-%d")
-        pagado = request.form.get("pagado") == "1"   # ← NUEVO
+        pagado = request.form.get("pagado") == "1"
+
+        es_tarea = request.form.get("es_tarea") == "1"
+        tarea_datetime = None
+        if es_tarea:
+            tarea_fecha_str = request.form.get("tarea_fecha", "")
+            tarea_hora_str = request.form.get("tarea_hora", "")
+            if tarea_fecha_str and tarea_hora_str:
+                tarea_datetime = datetime.strptime(
+                    f"{tarea_fecha_str} {tarea_hora_str}", "%Y-%m-%d %H:%M"
+                )
 
         try:
             cliente = buscar_o_crear_cliente(session, nombre_cliente)
-            trabajo = Trabajo(cliente_id=cliente.id, descripcion=descripcion,
-                              monto=monto, fecha=fecha, pagado=pagado)   # ← NUEVO
+            trabajo = Trabajo(
+                cliente_id=cliente.id,
+                descripcion=descripcion,
+                monto=monto,
+                fecha=fecha,
+                pagado=pagado,
+                es_tarea=es_tarea,
+                tarea_datetime=tarea_datetime
+            )
             session.add(trabajo)
             session.commit()
         except Exception:
@@ -114,8 +141,15 @@ def nuevo():
             cliente = session.query(Cliente).filter(
                 Cliente.nombre.ilike(nombre_cliente)).first()
             if cliente:
-                trabajo = Trabajo(cliente_id=cliente.id, descripcion=descripcion,
-                                  monto=monto, fecha=fecha, pagado=pagado)   # ← NUEVO
+                trabajo = Trabajo(
+                    cliente_id=cliente.id,
+                    descripcion=descripcion,
+                    monto=monto,
+                    fecha=fecha,
+                    pagado=pagado,
+                    es_tarea=es_tarea,
+                    tarea_datetime=tarea_datetime
+                )
                 session.add(trabajo)
                 session.commit()
         finally:
@@ -135,11 +169,11 @@ def cliente(cliente_id):
                 .filter(Trabajo.cliente_id == cliente_id)
                 .order_by(Trabajo.fecha.desc()).all())
     total = sum(t.monto for t in trabajos)
-    cobrado = sum(t.monto for t in trabajos if t.pagado)      # ← NUEVO
-    pendiente = sum(t.monto for t in trabajos if not t.pagado) # ← NUEVO
+    cobrado = sum(t.monto for t in trabajos if t.pagado)
+    pendiente = sum(t.monto for t in trabajos if not t.pagado)
     session.close()
     return render_template("cliente.html", cliente=c, trabajos=trabajos,
-                           total=total, cobrado=cobrado, pendiente=pendiente)  # ← NUEVO
+                           total=total, cobrado=cobrado, pendiente=pendiente)
 
 @app.route("/eliminar/<int:trabajo_id>", methods=["POST"])
 def eliminar(trabajo_id):
@@ -151,7 +185,6 @@ def eliminar(trabajo_id):
     session.close()
     return redirect(url_for("index", mes=mes, anio=anio))
 
-# ← NUEVO: ruta para alternar estado de pago sin recargar página
 @app.route("/toggle-pago/<int:trabajo_id>", methods=["POST"])
 def toggle_pago(trabajo_id):
     session = get_session()
@@ -162,6 +195,39 @@ def toggle_pago(trabajo_id):
         result = {"pagado": t.pagado}
     else:
         result = {"error": "not found"}
+    session.close()
+    return jsonify(result)
+
+@app.route("/tarea-hecha/<int:trabajo_id>", methods=["POST"])
+def tarea_hecha(trabajo_id):
+    session = get_session()
+    t = session.query(Trabajo).filter(Trabajo.id == trabajo_id).first()
+    if t:
+        t.tarea_hecha = True
+        session.commit()
+        result = {"ok": True}
+    else:
+        result = {"error": "not found"}
+    session.close()
+    return jsonify(result)
+
+@app.route("/api/tareas-pendientes")
+def api_tareas_pendientes():
+    session = get_session()
+    tareas = (session.query(Trabajo)
+              .options(joinedload(Trabajo.cliente))
+              .filter(Trabajo.es_tarea == True,
+                      Trabajo.tarea_hecha == False,
+                      Trabajo.tarea_datetime != None)
+              .all())
+    result = []
+    for t in tareas:
+        result.append({
+            "id": t.id,
+            "cliente": t.cliente.nombre,
+            "descripcion": t.descripcion,
+            "tarea_datetime": t.tarea_datetime.isoformat() if t.tarea_datetime else None
+        })
     session.close()
     return jsonify(result)
 

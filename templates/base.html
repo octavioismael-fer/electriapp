@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ElectriApp">
+<link rel="manifest" href="/static/manifest.json">
 <title>ElectriApp</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -97,7 +98,7 @@
   .trabajo-info { flex: 1; }
   .trabajo-cliente { font-size: 14px; font-weight: 700; }
   .trabajo-desc { font-size: 13px; color: var(--subtexto); margin-top: 2px; }
-  .trabajo-monto { font-size: 16px; font-weight: 700; color: var(--ok); white-space: nowrap; }
+  .trabajo-monto { font-size: 16px; font-weight: 700; white-space: nowrap; }
   .divider { height: 1px; background: var(--surface2); margin: 14px 0; }
   .empty { text-align: center; padding: 48px 0; color: var(--subtexto); }
   .empty .icon { font-size: 48px; margin-bottom: 12px; }
@@ -126,9 +127,86 @@
   }
   .sugerencia:last-child { border-bottom: none; }
   .sugerencia:active { background: var(--surface); }
+
+  /* ── Tareas pendientes ── */
+  .tarea-card {
+    background: #1a1000;
+    border: 1.5px solid #f59e0b55;
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .tarea-icon { font-size: 22px; line-height: 1; padding-top: 2px; }
+  .tarea-info { flex: 1; }
+  .tarea-cliente { font-size: 14px; font-weight: 700; color: var(--acento); }
+  .tarea-desc { font-size: 13px; color: var(--subtexto); margin-top: 2px; }
+  .tarea-hora { font-size: 12px; color: var(--acento); font-weight: 600; margin-top: 5px; }
+  .tarea-hecha-btn {
+    background: none; border: 1px solid #f59e0b55;
+    border-radius: 8px; color: var(--acento);
+    font-size: 12px; font-weight: 600;
+    padding: 6px 10px; cursor: pointer;
+    white-space: nowrap; align-self: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tarea-hecha-btn:active { opacity: 0.7; }
+  .seccion-label {
+    font-size: 13px; color: var(--subtexto);
+    font-weight: 600; margin-bottom: 10px;
+  }
 </style>
 </head>
 <body>
 {% block body %}{% endblock %}
+
+<script>
+// ── Registro del Service Worker ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js')
+    .then(reg => {
+      console.log('SW registrado');
+      programarNotificaciones();
+    })
+    .catch(err => console.log('SW error:', err));
+}
+
+// ── Pedir permiso y programar notificaciones ──
+async function programarNotificaciones() {
+  if (!('Notification' in window)) return;
+
+  // Pedimos permiso si todavía no se dio
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+  if (Notification.permission !== 'granted') return;
+
+  // Traemos las tareas pendientes del servidor
+  try {
+    const res = await fetch('/api/tareas-pendientes');
+    const tareas = await res.json();
+    const sw = await navigator.serviceWorker.ready;
+
+    tareas.forEach(t => {
+      const fechaTarea = new Date(t.tarea_datetime);
+      // Notificamos 15 minutos antes
+      const cuando = fechaTarea.getTime() - 15 * 60 * 1000;
+      if (cuando > Date.now()) {
+        sw.active.postMessage({
+          tipo: 'programar',
+          id: t.id,
+          titulo: `⚡ ElectriApp — ${t.cliente}`,
+          cuerpo: `En 15 min: ${t.descripcion}`,
+          cuando
+        });
+      }
+    });
+  } catch(e) {
+    console.log('Error programando notificaciones:', e);
+  }
+}
+</script>
 </body>
 </html>

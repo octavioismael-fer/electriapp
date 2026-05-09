@@ -6,6 +6,25 @@
 </div>
 
 <div class="content">
+
+  <!-- Panel de tareas pendientes -->
+  {% if tareas_pendientes %}
+  <div style="margin-bottom:14px">
+    <div class="seccion-label">🔔 Trabajos programados</div>
+    {% for t in tareas_pendientes %}
+    <div class="tarea-card" id="tarea-{{ t.id }}">
+      <div class="tarea-icon">🔧</div>
+      <div class="tarea-info">
+        <div class="tarea-cliente">{{ t.cliente.nombre }}</div>
+        <div class="tarea-desc">{{ t.descripcion }}</div>
+        <div class="tarea-hora">📅 {{ t.tarea_datetime.strftime('%d/%m/%Y') }} · ⏰ {{ t.tarea_datetime.strftime('%H:%M') }} hs</div>
+      </div>
+      <button class="tarea-hecha-btn" onclick="marcarHecha({{ t.id }})">✓ Hecho</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- Navegación de mes -->
   <div class="mes-nav">
     <a href="/?mes={{ mes_ant }}&anio={{ anio_ant }}">‹</a>
@@ -16,7 +35,7 @@
     <a href="/?mes={{ mes_sig }}&anio={{ anio_sig }}">›</a>
   </div>
 
-  <!-- NUEVO: Filtros de pago -->
+  <!-- Filtros de pago -->
   <div class="filtros-pago">
     <a href="/?mes={{ mes }}&anio={{ anio }}&filtro=todos"
        class="filtro-btn {% if filtro == 'todos' %}activo{% endif %}">
@@ -33,7 +52,6 @@
   </div>
 
   {% if resumen %}
-  <!-- Resumen por cliente -->
   <div class="card" style="margin-bottom:14px">
     <div class="card-label" style="margin-bottom:10px">Por cliente</div>
     {% for r in resumen|sort(attribute='total', reverse=True) %}
@@ -57,6 +75,11 @@
         <div class="trabajo-info">
           <div class="trabajo-cliente">{{ t.cliente.nombre }}</div>
           <div class="trabajo-desc">{{ t.descripcion }}</div>
+          {% if t.es_tarea and not t.tarea_hecha and t.tarea_datetime %}
+          <div style="font-size:11px;color:#f59e0b;margin-top:4px">
+            📅 {{ t.tarea_datetime.strftime('%d/%m %H:%M') }} hs
+          </div>
+          {% endif %}
           <button
             class="badge-pago {% if t.pagado %}pagado{% else %}debe{% endif %}"
             onclick="togglePago({{ t.id }}, this)"
@@ -83,7 +106,6 @@
     </div>
     {% endif %}
   {% else %}
-    <!-- Cobrados / Deben: solo resumen por cliente, sin lista individual -->
     {% if not resumen %}
     <div class="empty">
       <div class="icon">⚡</div>
@@ -95,74 +117,37 @@
     </div>
     {% endif %}
   {% endif %}
+
 </div>
 
 <a href="/nuevo" class="fab">+</a>
 
 <style>
-/* Filtros */
 .filtros-pago {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
+  display: flex; gap: 8px; margin-bottom: 14px;
 }
 .filtro-btn {
-  flex: 1;
-  text-align: center;
-  padding: 8px 4px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
-  background: #1e293b;
-  border: 2px solid transparent;
-  text-decoration: none;
-  transition: all 0.15s;
+  flex: 1; text-align: center; padding: 8px 4px;
+  border-radius: 10px; font-size: 13px; font-weight: 600;
+  color: #64748b; background: #1e293b;
+  border: 2px solid transparent; text-decoration: none; transition: all 0.15s;
 }
-.filtro-btn.activo {
-  color: #f1f5f9;
-  border-color: #475569;
-  background: #334155;
-}
-.filtro-btn.pagados.activo {
-  color: #22c55e;
-  border-color: #22c55e;
-  background: #052e16;
-}
-.filtro-btn.deben.activo {
-  color: #ef4444;
-  border-color: #ef4444;
-  background: #2d0a0a;
-}
+.filtro-btn.activo { color: #f1f5f9; border-color: #475569; background: #334155; }
+.filtro-btn.pagados.activo { color: #22c55e; border-color: #22c55e; background: #052e16; }
+.filtro-btn.deben.activo { color: #ef4444; border-color: #ef4444; background: #2d0a0a; }
 
-/* Color del monto según estado */
 .monto-pagado { color: #22c55e; }
 .monto-debe   { color: #ef4444; }
 
-/* Badge de pago (clickeable) */
 .badge-pago {
-  display: inline-block;
-  margin-top: 5px;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 20px;
-  border: none;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  -webkit-tap-highlight-color: transparent;
+  display: inline-block; margin-top: 5px;
+  font-size: 11px; font-weight: 700; padding: 3px 10px;
+  border-radius: 20px; border: none; cursor: pointer;
+  transition: opacity 0.15s; -webkit-tap-highlight-color: transparent;
 }
 .badge-pago:active { opacity: 0.7; }
-.badge-pago.pagado {
-  background: #052e16;
-  color: #22c55e;
-  border: 1px solid #22c55e44;
-}
-.badge-pago.debe {
-  background: #2d0a0a;
-  color: #ef4444;
-  border: 1px solid #ef444444;
-}
+.badge-pago.pagado { background: #052e16; color: #22c55e; border: 1px solid #22c55e44; }
+.badge-pago.debe   { background: #2d0a0a; color: #ef4444; border: 1px solid #ef444444; }
 </style>
 
 <script>
@@ -170,14 +155,32 @@ async function togglePago(id, btn) {
   try {
     const res = await fetch(`/toggle-pago/${id}`, { method: 'POST' });
     const data = await res.json();
-    // Actualizamos badge
     const pagado = data.pagado;
     btn.className = pagado ? 'badge-pago pagado' : 'badge-pago debe';
     btn.textContent = pagado ? '✓ Cobrado' : '⏳ Debe';
-    // Actualizamos color del monto
     const montoEl = btn.closest('.trabajo-item').querySelector('.trabajo-monto');
     if (montoEl) {
       montoEl.className = pagado ? 'trabajo-monto monto-pagado' : 'trabajo-monto monto-debe';
+    }
+  } catch(e) {
+    alert('Error al actualizar. Intentá de nuevo.');
+  }
+}
+
+async function marcarHecha(id) {
+  try {
+    await fetch(`/tarea-hecha/${id}`, { method: 'POST' });
+    // Cancelar notificación en el SW
+    if ('serviceWorker' in navigator) {
+      const sw = await navigator.serviceWorker.ready;
+      sw.active.postMessage({ tipo: 'cancelar', id });
+    }
+    // Sacar la tarjeta de la pantalla con animación
+    const el = document.getElementById(`tarea-${id}`);
+    if (el) {
+      el.style.transition = 'opacity 0.3s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 300);
     }
   } catch(e) {
     alert('Error al actualizar. Intentá de nuevo.');
