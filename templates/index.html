@@ -16,6 +16,22 @@
     <a href="/?mes={{ mes_sig }}&anio={{ anio_sig }}">›</a>
   </div>
 
+  <!-- NUEVO: Filtros de pago -->
+  <div class="filtros-pago">
+    <a href="/?mes={{ mes }}&anio={{ anio }}&filtro=todos"
+       class="filtro-btn {% if filtro == 'todos' %}activo{% endif %}">
+      Todos
+    </a>
+    <a href="/?mes={{ mes }}&anio={{ anio }}&filtro=pagados"
+       class="filtro-btn pagados {% if filtro == 'pagados' %}activo{% endif %}">
+      ✓ Cobrados
+    </a>
+    <a href="/?mes={{ mes }}&anio={{ anio }}&filtro=deben"
+       class="filtro-btn deben {% if filtro == 'deben' %}activo{% endif %}">
+      ⏳ Deben
+    </a>
+  </div>
+
   {% if resumen %}
   <!-- Resumen por cliente -->
   <div class="card" style="margin-bottom:14px">
@@ -40,6 +56,13 @@
       <div class="trabajo-info">
         <div class="trabajo-cliente">{{ t.cliente.nombre }}</div>
         <div class="trabajo-desc">{{ t.descripcion }}</div>
+        <!-- NUEVO: badge de estado -->
+        <button
+          class="badge-pago {% if t.pagado %}pagado{% else %}debe{% endif %}"
+          onclick="togglePago({{ t.id }}, this)"
+          title="Tocá para cambiar estado">
+          {% if t.pagado %}✓ Cobrado{% else %}⏳ Debe{% endif %}
+        </button>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
         <div class="trabajo-monto">${{ "{:,.0f}".format(t.monto) }}</div>
@@ -53,11 +76,98 @@
   {% else %}
   <div class="empty">
     <div class="icon">⚡</div>
-    <div>Sin trabajos este mes</div>
-    <div style="font-size:13px;margin-top:6px">Tocá + para agregar el primero</div>
+    {% if filtro == 'pagados' %}
+      <div>Sin trabajos cobrados este mes</div>
+    {% elif filtro == 'deben' %}
+      <div>Sin deudas pendientes 🎉</div>
+    {% else %}
+      <div>Sin trabajos este mes</div>
+      <div style="font-size:13px;margin-top:6px">Tocá + para agregar el primero</div>
+    {% endif %}
   </div>
   {% endif %}
 </div>
 
 <a href="/nuevo" class="fab">+</a>
+
+<style>
+/* Filtros */
+.filtros-pago {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.filtro-btn {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  background: #1e293b;
+  border: 2px solid transparent;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.filtro-btn.activo {
+  color: #f1f5f9;
+  border-color: #475569;
+  background: #334155;
+}
+.filtro-btn.pagados.activo {
+  color: #22c55e;
+  border-color: #22c55e;
+  background: #052e16;
+}
+.filtro-btn.deben.activo {
+  color: #ef4444;
+  border-color: #ef4444;
+  background: #2d0a0a;
+}
+
+/* Badge de pago (clickeable) */
+.badge-pago {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.badge-pago:active { opacity: 0.7; }
+.badge-pago.pagado {
+  background: #052e16;
+  color: #22c55e;
+  border: 1px solid #22c55e44;
+}
+.badge-pago.debe {
+  background: #2d0a0a;
+  color: #ef4444;
+  border: 1px solid #ef444444;
+}
+</style>
+
+<script>
+// Toggle de pago directo desde la lista, sin recargar la página
+async function togglePago(id, btn) {
+  try {
+    const res = await fetch(`/toggle-pago/${id}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.pagado) {
+      btn.className = 'badge-pago pagado';
+      btn.textContent = '✓ Cobrado';
+    } else {
+      btn.className = 'badge-pago debe';
+      btn.textContent = '⏳ Debe';
+    }
+  } catch(e) {
+    alert('Error al actualizar. Intentá de nuevo.');
+  }
+}
+</script>
 {% endblock %}

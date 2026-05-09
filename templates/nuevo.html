@@ -30,11 +30,73 @@
       <input type="date" name="fecha" value="{{ hoy }}" required>
     </div>
 
+    <!-- NUEVO: Estado de pago -->
+    <div class="field">
+      <label>Estado del pago *</label>
+      <div class="pago-opciones">
+        <label class="pago-btn" id="lbl-pagado">
+          <input type="radio" name="pagado" value="1" required>
+          <span class="pago-icon">✓</span>
+          <span>Ya pagó</span>
+        </label>
+        <label class="pago-btn" id="lbl-debe">
+          <input type="radio" name="pagado" value="0">
+          <span class="pago-icon">⏳</span>
+          <span>Falta pagar</span>
+        </label>
+      </div>
+    </div>
+
     <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px">
       💾 Guardar trabajo
     </button>
   </form>
 </div>
+
+<style>
+.pago-opciones {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.pago-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border-radius: 12px;
+  border: 2px solid #334155;
+  text-align: center;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: #1e293b;
+  transition: all 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.pago-btn input[type="radio"] {
+  display: none;
+}
+.pago-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+/* Estado seleccionado: pagado */
+#lbl-pagado:has(input:checked) {
+  background: #052e16;
+  border-color: #22c55e;
+  color: #22c55e;
+}
+/* Estado seleccionado: debe */
+#lbl-debe:has(input:checked) {
+  background: #2d0a0a;
+  border-color: #ef4444;
+  color: #ef4444;
+}
+</style>
 
 <script>
 const clientes = {{ clientes | tojson }};
