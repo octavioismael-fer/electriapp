@@ -64,7 +64,7 @@ async function diagnosticar() {
     addLog('SW: no soportado');
   } else {
     try {
-      const reg = await navigator.serviceWorker.getRegistration('/static/sw.js');
+      const reg = await navigator.serviceWorker.getRegistration('/');
       if (reg) {
         const estado = reg.active ? 'activo' : reg.installing ? 'instalando' : reg.waiting ? 'esperando' : 'registrado sin activar';
         swEl.innerHTML = `<span class="ok">✅ Registrado (${estado})</span>`;
@@ -73,7 +73,7 @@ async function diagnosticar() {
       } else {
         // Intentar registrar
         addLog('SW: no registrado, intentando registrar...');
-        const newReg = await navigator.serviceWorker.register('/static/sw.js');
+        const newReg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
         swEl.innerHTML = '<span class="warn">⚠️ No estaba registrado — se registró ahora. Recargá la página.</span>';
         addLog('SW: registrado ahora en scope ' + newReg.scope);
       }

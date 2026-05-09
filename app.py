@@ -231,6 +231,14 @@ def api_tareas_pendientes():
     session.close()
     return jsonify(result)
 
+@app.route("/sw.js")
+def service_worker():
+    from flask import send_from_directory
+    response = send_from_directory('static', 'sw.js')
+    response.headers['Service-Worker-Allowed'] = '/'
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
 @app.route("/debug")
 def debug():
     return render_template("debug.html")

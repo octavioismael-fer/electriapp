@@ -165,7 +165,7 @@
 <script>
 // ── Registro del Service Worker ──
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/static/sw.js')
+  navigator.serviceWorker.register('/sw.js', { scope: '/' })
     .then(reg => {
       console.log('SW registrado');
       programarNotificaciones();
