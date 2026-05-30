@@ -2,10 +2,17 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship, joinedload
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import json
+
+from pywebpush import webpush, WebPushException
 
 app = Flask(__name__)
+
+@app.context_processor
+def inject_vapid():
+    return {"vapid_public_key": os.environ.get("VAPID_PUBLIC_KEY", "")}
 
 class Base(DeclarativeBase):
     pass
@@ -30,6 +37,45 @@ class Trabajo(Base):
     tarea_datetime = Column(DateTime, nullable=True)
     tarea_hecha = Column(Boolean, nullable=False, default=False)
     cliente = relationship("Cliente", back_populates="trabajos")
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+    id = Column(Integer, primary_key=True)
+    endpoint = Column(String(500), unique=True, nullable=False)
+    p256dh = Column(String(200), nullable=False)
+    auth = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+class NotificacionEnviada(Base):
+    __tablename__ = "notificaciones_enviadas"
+    id = Column(Integer, primary_key=True)
+    trabajo_id = Column(Integer, ForeignKey("trabajos.id", ondelete="CASCADE"), nullable=False)
+    tipo = Column(String(20), nullable=False)  # "aviso" o "ahora"
+    enviada_at = Column(DateTime, default=datetime.now)
+
+def _enviar_push_a_todos(session, titulo, cuerpo):
+    subs = session.query(PushSubscription).all()
+    private_key = os.environ.get("VAPID_PRIVATE_KEY", "")
+    email = os.environ.get("VAPID_EMAIL", "admin@electriapp.com")
+    muertos = []
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth}
+                },
+                data=json.dumps({"titulo": titulo, "cuerpo": cuerpo}),
+                vapid_private_key=private_key,
+                vapid_claims={"sub": f"mailto:{email}"}
+            )
+        except WebPushException as ex:
+            if ex.response and ex.response.status_code in (404, 410):
+                muertos.append(sub.id)
+    for sid in muertos:
+        session.query(PushSubscription).filter(PushSubscription.id == sid).delete()
+    if muertos:
+        session.commit()
 
 MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
          "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
@@ -251,6 +297,89 @@ def api_clientes():
         Cliente.nombre.ilike(f"%{q}%")).limit(5).all()
     session.close()
     return jsonify([c.nombre for c in clientes])
+
+@app.route("/api/subscribe", methods=["POST"])
+def api_subscribe():
+    data = request.json
+    if not data or "endpoint" not in data:
+        return jsonify({"error": "invalid"}), 400
+    try:
+        endpoint = data["endpoint"]
+        p256dh = data["keys"]["p256dh"]
+        auth = data["keys"]["auth"]
+    except (KeyError, TypeError):
+        return jsonify({"error": "invalid payload"}), 400
+
+    session = get_session()
+    try:
+        sub = session.query(PushSubscription).filter(
+            PushSubscription.endpoint == endpoint
+        ).first()
+        if not sub:
+            sub = PushSubscription(endpoint=endpoint, p256dh=p256dh, auth=auth)
+            session.add(sub)
+            session.commit()
+    finally:
+        session.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/enviar-notificaciones", methods=["GET", "POST"])
+def api_enviar_notificaciones():
+    session = get_session()
+    try:
+        ahora = datetime.now()
+        enviadas = 0
+
+        # Limpia registros viejos (más de 2 días)
+        session.query(NotificacionEnviada).filter(
+            NotificacionEnviada.enviada_at < ahora - timedelta(days=2)
+        ).delete()
+
+        tareas = (session.query(Trabajo)
+                  .options(joinedload(Trabajo.cliente))
+                  .filter(Trabajo.es_tarea == True,
+                          Trabajo.tarea_hecha == False,
+                          Trabajo.tarea_datetime != None)
+                  .all())
+
+        for t in tareas:
+            dt = t.tarea_datetime
+            minutos = (dt - ahora).total_seconds() / 60
+
+            # Aviso ~15 minutos antes
+            if 13 <= minutos <= 17:
+                ya = session.query(NotificacionEnviada).filter(
+                    NotificacionEnviada.trabajo_id == t.id,
+                    NotificacionEnviada.tipo == "aviso"
+                ).first()
+                if not ya:
+                    _enviar_push_a_todos(
+                        session,
+                        f"⚡ En ~15 min — {t.cliente.nombre}",
+                        t.descripcion
+                    )
+                    session.add(NotificacionEnviada(trabajo_id=t.id, tipo="aviso"))
+                    enviadas += 1
+
+            # Notificación en el momento
+            if -1 <= minutos <= 1:
+                ya = session.query(NotificacionEnviada).filter(
+                    NotificacionEnviada.trabajo_id == t.id,
+                    NotificacionEnviada.tipo == "ahora"
+                ).first()
+                if not ya:
+                    _enviar_push_a_todos(
+                        session,
+                        f"🔧 ¡Ahora! — {t.cliente.nombre}",
+                        t.descripcion
+                    )
+                    session.add(NotificacionEnviada(trabajo_id=t.id, tipo="ahora"))
+                    enviadas += 1
+
+        session.commit()
+    finally:
+        session.close()
+    return jsonify({"ok": True, "enviadas": enviadas})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
