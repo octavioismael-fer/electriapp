@@ -305,6 +305,37 @@ def api_clientes():
     session.close()
     return jsonify([c.nombre for c in clientes])
 
+@app.route("/debug/cron-check")
+def debug_cron_check():
+    session = get_session()
+    try:
+        ahora = ahora_local()
+        tareas = (session.query(Trabajo)
+                  .options(joinedload(Trabajo.cliente))
+                  .filter(Trabajo.es_tarea == True,
+                          Trabajo.tarea_hecha == False,
+                          Trabajo.tarea_datetime != None)
+                  .all())
+        subs = session.query(PushSubscription).count()
+        resultado = []
+        for t in tareas:
+            minutos = (t.tarea_datetime - ahora).total_seconds() / 60
+            resultado.append({
+                "id": t.id,
+                "cliente": t.cliente.nombre,
+                "tarea_datetime": t.tarea_datetime.isoformat(),
+                "minutos_restantes": round(minutos, 1),
+                "en_ventana_aviso": 13 <= minutos <= 17,
+                "en_ventana_ahora": -1 <= minutos <= 1,
+            })
+    finally:
+        session.close()
+    return jsonify({
+        "ahora_servidor": ahora.isoformat(),
+        "suscripciones_en_db": subs,
+        "tareas_pendientes": resultado,
+    })
+
 @app.route("/debug/push-status")
 def debug_push_status():
     import traceback
