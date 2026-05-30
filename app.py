@@ -310,16 +310,7 @@ def debug_push_status():
     import traceback
     session = get_session()
     try:
-        subs = session.query(PushSubscription).all()
-        sub_count = len(subs)
-        # Intenta enviar push de prueba si hay suscripciones
-        test_result = "no hay suscripciones guardadas"
-        if subs:
-            try:
-                _enviar_push_a_todos(session, "⚡ Test ElectriApp", "Si ves esto, las notificaciones funcionan")
-                test_result = f"push enviado a {sub_count} suscripcion(es)"
-            except Exception:
-                test_result = traceback.format_exc()
+        sub_count = session.query(PushSubscription).count()
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 200
     finally:
@@ -329,7 +320,6 @@ def debug_push_status():
         "vapid_public_key": bool(os.environ.get("VAPID_PUBLIC_KEY")),
         "vapid_private_key": bool(os.environ.get("VAPID_PRIVATE_KEY")),
         "vapid_email": os.environ.get("VAPID_EMAIL", "NO SETEADO"),
-        "test_push": test_result
     })
 
 @app.route("/api/subscribe", methods=["POST"])
