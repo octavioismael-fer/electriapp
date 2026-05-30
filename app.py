@@ -332,10 +332,12 @@ def api_subscribe():
 
 @app.route("/api/enviar-notificaciones", methods=["GET", "POST"])
 def api_enviar_notificaciones():
+    import traceback
     session = get_session()
     try:
         ahora = ahora_local()
         enviadas = 0
+        errores = []
 
         # Limpia registros viejos (más de 2 días)
         session.query(NotificacionEnviada).filter(
@@ -360,13 +362,12 @@ def api_enviar_notificaciones():
                     NotificacionEnviada.tipo == "aviso"
                 ).first()
                 if not ya:
-                    _enviar_push_a_todos(
-                        session,
-                        f"⚡ En ~15 min — {t.cliente.nombre}",
-                        t.descripcion
-                    )
-                    session.add(NotificacionEnviada(trabajo_id=t.id, tipo="aviso"))
-                    enviadas += 1
+                    try:
+                        _enviar_push_a_todos(session, f"⚡ En ~15 min — {t.cliente.nombre}", t.descripcion)
+                        session.add(NotificacionEnviada(trabajo_id=t.id, tipo="aviso"))
+                        enviadas += 1
+                    except Exception as e:
+                        errores.append({"tarea": t.id, "tipo": "aviso", "error": traceback.format_exc()})
 
             # Notificación en el momento
             if -1 <= minutos <= 1:
@@ -375,18 +376,20 @@ def api_enviar_notificaciones():
                     NotificacionEnviada.tipo == "ahora"
                 ).first()
                 if not ya:
-                    _enviar_push_a_todos(
-                        session,
-                        f"🔧 ¡Ahora! — {t.cliente.nombre}",
-                        t.descripcion
-                    )
-                    session.add(NotificacionEnviada(trabajo_id=t.id, tipo="ahora"))
-                    enviadas += 1
+                    try:
+                        _enviar_push_a_todos(session, f"🔧 ¡Ahora! — {t.cliente.nombre}", t.descripcion)
+                        session.add(NotificacionEnviada(trabajo_id=t.id, tipo="ahora"))
+                        enviadas += 1
+                    except Exception as e:
+                        errores.append({"tarea": t.id, "tipo": "ahora", "error": traceback.format_exc()})
 
         session.commit()
+    except Exception as e:
+        session.rollback()
+        return jsonify({"ok": False, "error": traceback.format_exc()}), 200
     finally:
         session.close()
-    return jsonify({"ok": True, "enviadas": enviadas})
+    return jsonify({"ok": True, "enviadas": enviadas, "errores": errores})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
