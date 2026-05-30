@@ -79,6 +79,8 @@ def _enviar_push_a_todos(session, titulo, cuerpo):
         except WebPushException as ex:
             if ex.response and ex.response.status_code in (404, 410):
                 muertos.append(sub.id)
+        except Exception:
+            muertos.append(sub.id)
     for sid in muertos:
         session.query(PushSubscription).filter(PushSubscription.id == sid).delete()
     if muertos:
@@ -367,13 +369,10 @@ def api_subscribe():
 
     session = get_session()
     try:
-        sub = session.query(PushSubscription).filter(
-            PushSubscription.endpoint == endpoint
-        ).first()
-        if not sub:
-            sub = PushSubscription(endpoint=endpoint, p256dh=p256dh, auth=auth)
-            session.add(sub)
-            session.commit()
+        # Reemplaza todas las suscripciones anteriores con la nueva
+        session.query(PushSubscription).delete()
+        session.add(PushSubscription(endpoint=endpoint, p256dh=p256dh, auth=auth))
+        session.commit()
     finally:
         session.close()
     return jsonify({"ok": True})
