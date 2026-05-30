@@ -2,7 +2,14 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship, joinedload
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Argentina no observa DST, siempre UTC-3
+ARGENTINA_TZ = timezone(timedelta(hours=-3))
+
+def ahora_local():
+    """Hora actual en Argentina como datetime naive (compatible con tarea_datetime en DB)."""
+    return datetime.now(ARGENTINA_TZ).replace(tzinfo=None)
 import os
 import json
 
@@ -327,12 +334,12 @@ def api_subscribe():
 def api_enviar_notificaciones():
     session = get_session()
     try:
-        ahora = datetime.now()
+        ahora = ahora_local()
         enviadas = 0
 
         # Limpia registros viejos (más de 2 días)
         session.query(NotificacionEnviada).filter(
-            NotificacionEnviada.enviada_at < ahora - timedelta(days=2)
+            NotificacionEnviada.enviada_at < datetime.now() - timedelta(days=2)
         ).delete()
 
         tareas = (session.query(Trabajo)
