@@ -234,6 +234,47 @@ def cliente(cliente_id):
     return render_template("cliente.html", cliente=c, trabajos=trabajos,
                            total=total, cobrado=cobrado, pendiente=pendiente)
 
+@app.route("/editar/<int:trabajo_id>", methods=["GET", "POST"])
+def editar(trabajo_id):
+    session = get_session()
+    try:
+        t = session.query(Trabajo).options(joinedload(Trabajo.cliente)).filter(Trabajo.id == trabajo_id).first()
+        if not t:
+            return redirect(url_for("index"))
+
+        if request.method == "POST":
+            nombre_cliente = request.form["cliente"].strip().title()
+            descripcion = request.form["descripcion"].strip()
+            monto = float(request.form["monto"] or 0)
+            fecha = datetime.strptime(request.form["fecha"], "%Y-%m-%d")
+            pagado = request.form.get("pagado") == "1"
+            es_tarea = request.form.get("es_tarea") == "1"
+            tarea_datetime = None
+            if es_tarea:
+                tarea_fecha_str = request.form.get("tarea_fecha", "")
+                tarea_hora_str = request.form.get("tarea_hora", "")
+                if tarea_fecha_str and tarea_hora_str:
+                    tarea_datetime = datetime.strptime(
+                        f"{tarea_fecha_str} {tarea_hora_str}", "%Y-%m-%d %H:%M"
+                    )
+
+            cliente = buscar_o_crear_cliente(session, nombre_cliente)
+            t.cliente_id = cliente.id
+            t.descripcion = descripcion
+            t.monto = monto
+            t.fecha = fecha
+            t.pagado = pagado
+            t.es_tarea = es_tarea
+            t.tarea_datetime = tarea_datetime
+            session.commit()
+            return redirect(url_for("index", mes=fecha.month, anio=fecha.year))
+
+        clientes = [c.nombre for c in session.query(Cliente).order_by(Cliente.nombre).all()]
+        return render_template("editar.html", trabajo=t,
+                               cliente_nombre=t.cliente.nombre, clientes=clientes)
+    finally:
+        session.close()
+
 @app.route("/eliminar/<int:trabajo_id>", methods=["POST"])
 def eliminar(trabajo_id):
     session = get_session()

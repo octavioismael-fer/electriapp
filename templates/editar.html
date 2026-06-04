@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="topbar">
+  <a href="javascript:history.back()" class="back-btn">← Volver</a>
+  <h1>Editar trabajo</h1>
+</div>
+
+<div class="content">
+  <form method="POST" action="/editar/{{ trabajo.id }}">
+    <div class="field">
+      <label>Cliente *</label>
+      <input type="text" name="cliente" id="campo-cliente"
+             value="{{ cliente_nombre }}"
+             placeholder="Nombre del cliente"
+             autocomplete="off" required>
+      <div id="sugerencias"></div>
+    </div>
+
+    <div class="field">
+      <label>Descripción *</label>
+      <textarea name="descripcion" placeholder="Ej: Instalación de tomacorriente..." required>{{ trabajo.descripcion }}</textarea>
+    </div>
+
+    <div class="field">
+      <label>Monto ($)</label>
+      <input type="number" name="monto" value="{{ trabajo.monto }}" min="0" step="0.01" inputmode="decimal">
+    </div>
+
+    <div class="field">
+      <label>Fecha de registro</label>
+      <input type="date" name="fecha" value="{{ trabajo.fecha.strftime('%Y-%m-%d') }}" required>
+    </div>
+
+    <div class="field">
+      <label>Estado del pago *</label>
+      <div class="pago-opciones">
+        <label class="pago-btn" id="lbl-pagado">
+          <input type="radio" name="pagado" value="1" {% if trabajo.pagado %}checked{% endif %} required>
+          <span class="pago-icon">✓</span>
+          <span>Ya pagó</span>
+        </label>
+        <label class="pago-btn" id="lbl-debe">
+          <input type="radio" name="pagado" value="0" {% if not trabajo.pagado %}checked{% endif %}>
+          <span class="pago-icon">⏳</span>
+          <span>Falta pagar</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>¿Tiene fecha para realizar el trabajo?</label>
+      <div class="pago-opciones">
+        <label class="pago-btn" id="lbl-notarea" onclick="toggleTarea(false)">
+          <input type="radio" name="es_tarea" value="0" {% if not trabajo.es_tarea %}checked{% endif %}>
+          <span class="pago-icon">📋</span>
+          <span>Sin fecha</span>
+        </label>
+        <label class="pago-btn" id="lbl-sitarea" onclick="toggleTarea(true)">
+          <input type="radio" name="es_tarea" value="1" {% if trabajo.es_tarea %}checked{% endif %}>
+          <span class="pago-icon">📅</span>
+          <span>Programar</span>
+        </label>
+      </div>
+    </div>
+
+    <div id="campos-tarea" style="display:{{ 'block' if trabajo.es_tarea else 'none' }}">
+      <div class="field">
+        <label>Fecha del trabajo</label>
+        <input type="date" name="tarea_fecha" id="tarea_fecha"
+               value="{{ trabajo.tarea_datetime.strftime('%Y-%m-%d') if trabajo.tarea_datetime else '' }}">
+      </div>
+      <div class="field">
+        <label>Hora del trabajo</label>
+        <input type="time" name="tarea_hora" id="tarea_hora"
+               value="{{ trabajo.tarea_datetime.strftime('%H:%M') if trabajo.tarea_datetime else '09:00' }}">
+      </div>
+      <div style="background:#1a1000;border:1px solid #f59e0b44;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#f59e0b;">
+        📲 La app te avisará 15 minutos antes de esta hora (la PWA debe estar instalada en el teléfono)
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px">
+      💾 Guardar cambios
+    </button>
+  </form>
+</div>
+
+<style>
+.pago-opciones {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.pago-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border-radius: 12px;
+  border: 2px solid #334155;
+  text-align: center;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: #1e293b;
+  transition: all 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.pago-btn input[type="radio"] { display: none; }
+.pago-icon { font-size: 22px; line-height: 1; }
+#lbl-pagado:has(input:checked) {
+  background: #052e16; border-color: #22c55e; color: #22c55e;
+}
+#lbl-debe:has(input:checked) {
+  background: #2d0a0a; border-color: #ef4444; color: #ef4444;
+}
+#lbl-sitarea:has(input:checked) {
+  background: #1a1000; border-color: #f59e0b; color: #f59e0b;
+}
+#lbl-notarea:has(input:checked) {
+  background: #1e293b; border-color: #475569; color: #f1f5f9;
+}
+</style>
+
+<script>
+const clientes = {{ clientes | tojson }};
+const input = document.getElementById('campo-cliente');
+const sugerencias = document.getElementById('sugerencias');
+
+input.addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  sugerencias.innerHTML = '';
+  if (q.length < 2) { sugerencias.style.display = 'none'; return; }
+  const matches = clientes.filter(c => c.toLowerCase().includes(q)).slice(0, 4);
+  if (matches.length === 0) { sugerencias.style.display = 'none'; return; }
+  matches.forEach(nombre => {
+    const div = document.createElement('div');
+    div.className = 'sugerencia';
+    div.textContent = nombre;
+    div.onclick = () => { input.value = nombre; sugerencias.style.display = 'none'; };
+    sugerencias.appendChild(div);
+  });
+  sugerencias.style.display = 'block';
+});
+document.addEventListener('click', e => {
+  if (!sugerencias.contains(e.target) && e.target !== input) {
+    sugerencias.style.display = 'none';
+  }
+});
+
+function toggleTarea(mostrar) {
+  document.getElementById('campos-tarea').style.display = mostrar ? 'block' : 'none';
+  document.getElementById('tarea_fecha').required = mostrar;
+  document.getElementById('tarea_hora').required = mostrar;
+}
+</script>
+{% endblock %}
