@@ -106,7 +106,7 @@ def buscar_o_crear_cliente(session, nombre):
 
 @app.route("/")
 def index():
-    ahora = datetime.now()
+    ahora = ahora_local()
     mes = int(request.args.get("mes", ahora.month))
     anio = int(request.args.get("anio", ahora.year))
     filtro = request.args.get("filtro", "todos")
@@ -213,31 +213,39 @@ def nuevo():
 
     clientes = [c.nombre for c in session.query(Cliente).order_by(Cliente.nombre).all()]
     session.close()
-    return render_template("nuevo.html", clientes=clientes, hoy=datetime.now().strftime("%Y-%m-%d"))
+    return render_template("nuevo.html", clientes=clientes, hoy=ahora_local().strftime("%Y-%m-%d"))
 
 @app.route("/cliente/<int:cliente_id>")
 def cliente(cliente_id):
     session = get_session()
-    c = session.query(Cliente).filter(Cliente.id == cliente_id).first()
-    trabajos = (session.query(Trabajo)
-                .options(joinedload(Trabajo.cliente))
-                .filter(Trabajo.cliente_id == cliente_id)
-                .order_by(Trabajo.fecha.desc()).all())
-    total = sum(t.monto for t in trabajos)
-    cobrado = sum(t.monto for t in trabajos if t.pagado)
-    pendiente = sum(t.monto for t in trabajos if not t.pagado)
-    session.close()
+    try:
+        c = session.query(Cliente).filter(Cliente.id == cliente_id).first()
+        if not c:
+            return redirect(url_for("index"))
+        trabajos = (session.query(Trabajo)
+                    .options(joinedload(Trabajo.cliente))
+                    .filter(Trabajo.cliente_id == cliente_id)
+                    .order_by(Trabajo.fecha.desc()).all())
+        total = sum(t.monto for t in trabajos)
+        cobrado = sum(t.monto for t in trabajos if t.pagado)
+        pendiente = sum(t.monto for t in trabajos if not t.pagado)
+    finally:
+        session.close()
     return render_template("cliente.html", cliente=c, trabajos=trabajos,
                            total=total, cobrado=cobrado, pendiente=pendiente)
 
 @app.route("/eliminar/<int:trabajo_id>", methods=["POST"])
 def eliminar(trabajo_id):
     session = get_session()
-    t = session.query(Trabajo).filter(Trabajo.id == trabajo_id).first()
-    mes, anio = t.fecha.month, t.fecha.year
-    session.delete(t)
-    session.commit()
-    session.close()
+    try:
+        t = session.query(Trabajo).filter(Trabajo.id == trabajo_id).first()
+        if not t:
+            return redirect(url_for("index"))
+        mes, anio = t.fecha.month, t.fecha.year
+        session.delete(t)
+        session.commit()
+    finally:
+        session.close()
     return redirect(url_for("index", mes=mes, anio=anio))
 
 @app.route("/toggle-pago/<int:trabajo_id>", methods=["POST"])

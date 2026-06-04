@@ -114,6 +114,7 @@ function actualizarTotales() {
   // Actualizamos los valores en pantalla
   const vals = document.querySelectorAll('.card-value');
   if (vals.length >= 3) {
+    vals[0].textContent = '$' + (cobrado + pendiente).toLocaleString('es-AR');
     vals[1].textContent = '$' + cobrado.toLocaleString('es-AR');
     vals[2].textContent = '$' + pendiente.toLocaleString('es-AR');
   }
