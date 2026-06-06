@@ -30,7 +30,12 @@
     <a href="/?mes={{ mes_ant }}&anio={{ anio_ant }}">‹</a>
     <div style="text-align:center">
       <div class="mes-label">{{ nombre_mes }} {{ anio }}</div>
-      <div class="total-label">Total: ${{ "{:,.0f}".format(total) }} · {{ trabajos|length }} trabajos</div>
+      <div class="total-label">
+        {% if filtro == 'pagados' %}✓ Cobrado
+        {% elif filtro == 'deben' %}⏳ Por cobrar
+        {% else %}Total{% endif %}:
+        ${{ "{:,.0f}".format(total) }} · {{ trabajos|length }} trabajo{{ 's' if trabajos|length != 1 else '' }}
+      </div>
     </div>
     <a href="/?mes={{ mes_sig }}&anio={{ anio_sig }}">›</a>
   </div>
@@ -109,7 +114,20 @@
     </div>
     {% endif %}
   {% else %}
-    {% if not resumen %}
+    {% if trabajos %}
+      {% for t in trabajos %}
+      <div class="trabajo-item">
+        <div class="trabajo-fecha">{{ t.fecha.strftime('%d/%m') }}</div>
+        <div class="trabajo-info">
+          <div class="trabajo-cliente">{{ t.cliente.nombre }}</div>
+          <div class="trabajo-desc">{{ t.descripcion }}</div>
+        </div>
+        <div class="trabajo-monto {% if t.pagado %}monto-pagado{% else %}monto-debe{% endif %}">
+          ${{ "{:,.0f}".format(t.monto) }}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
     <div class="empty">
       <div class="icon">⚡</div>
       {% if filtro == 'pagados' %}
