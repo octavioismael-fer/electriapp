@@ -517,7 +517,7 @@ def generar_pdf_trabajo(trabajo):
     # Header
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_text_color(245, 158, 11)
-    pdf.cell(0, 12, "ElectriApp", align="C")
+    pdf.cell(0, 12, "RCF Soluciones Electricas", align="C")
     pdf.ln(12)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(100, 116, 139)
@@ -530,7 +530,7 @@ def generar_pdf_trabajo(trabajo):
     pdf.line(20, pdf.get_y(), 190, pdf.get_y())
     pdf.ln(8)
 
-    def fila(label, valor, color_valor=(241, 245, 249)):
+    def fila(label, valor, color_valor=(20, 20, 20)):
         pdf.set_x(20)
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(100, 116, 139)
