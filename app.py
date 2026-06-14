@@ -531,12 +531,14 @@ def generar_pdf_trabajo(trabajo):
     pdf.ln(8)
 
     def fila(label, valor, color_valor=(241, 245, 249)):
+        pdf.set_x(20)
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(100, 116, 139)
         pdf.cell(50, 8, label)
+        pdf.set_x(70)
         pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(*color_valor)
-        pdf.multi_cell(0, 8, str(valor))
+        pdf.multi_cell(120, 8, str(valor))
 
     fila("Cliente:", trabajo.cliente.nombre)
     fila("Descripcion:", trabajo.descripcion)
