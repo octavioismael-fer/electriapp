@@ -95,13 +95,16 @@ def get_session():
     Session = sessionmaker(bind=engine)
     return Session()
 
-def buscar_o_crear_cliente(session, nombre):
+def buscar_o_crear_cliente(session, nombre, telefono=None):
     nombre = nombre.strip().title()
+    telefono = telefono.strip() if telefono else None
     cliente = session.query(Cliente).filter(Cliente.nombre.ilike(nombre)).first()
     if not cliente:
-        cliente = Cliente(nombre=nombre)
+        cliente = Cliente(nombre=nombre, telefono=telefono)
         session.add(cliente)
         session.flush()
+    elif telefono:
+        cliente.telefono = telefono
     return cliente
 
 @app.route("/")
@@ -163,6 +166,7 @@ def nuevo():
     session = get_session()
     if request.method == "POST":
         nombre_cliente = request.form["cliente"].strip().title()
+        telefono_cliente = request.form.get("telefono", "").strip()
         descripcion = request.form["descripcion"].strip()
         monto = float(request.form["monto"] or 0)
         fecha = datetime.strptime(request.form["fecha"], "%Y-%m-%d")
@@ -179,7 +183,7 @@ def nuevo():
                 )
 
         try:
-            cliente = buscar_o_crear_cliente(session, nombre_cliente)
+            cliente = buscar_o_crear_cliente(session, nombre_cliente, telefono_cliente)
             trabajo = Trabajo(
                 cliente_id=cliente.id,
                 descripcion=descripcion,
@@ -195,6 +199,8 @@ def nuevo():
             session.rollback()
             cliente = session.query(Cliente).filter(
                 Cliente.nombre.ilike(nombre_cliente)).first()
+            if cliente and telefono_cliente:
+                cliente.telefono = telefono_cliente
             if cliente:
                 trabajo = Trabajo(
                     cliente_id=cliente.id,
@@ -233,6 +239,21 @@ def cliente(cliente_id):
         session.close()
     return render_template("cliente.html", cliente=c, trabajos=trabajos,
                            total=total, cobrado=cobrado, pendiente=pendiente)
+
+@app.route("/cliente/<int:cliente_id>/telefono", methods=["POST"])
+def actualizar_telefono(cliente_id):
+    data = request.json or {}
+    telefono = data.get("telefono", "").strip()
+    session = get_session()
+    try:
+        c = session.query(Cliente).filter(Cliente.id == cliente_id).first()
+        if not c:
+            return jsonify({"error": "not found"}), 404
+        c.telefono = telefono if telefono else None
+        session.commit()
+    finally:
+        session.close()
+    return jsonify({"ok": True})
 
 @app.route("/editar/<int:trabajo_id>", methods=["GET", "POST"])
 def editar(trabajo_id):
@@ -486,6 +507,122 @@ def api_enviar_notificaciones():
     finally:
         session.close()
     return jsonify({"ok": True, "enviadas": enviadas, "errores": errores})
+
+def generar_pdf_trabajo(trabajo):
+    from fpdf import FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_margins(20, 20, 20)
+
+    # Header
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(245, 158, 11)  # amber
+    pdf.cell(0, 12, "ElectriApp", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(0, 6, "Resumen de Trabajo", ln=True, align="C")
+    pdf.ln(8)
+
+    # Linea separadora
+    pdf.set_draw_color(245, 158, 11)
+    pdf.set_line_width(0.5)
+    pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+    pdf.ln(8)
+
+    def fila(label, valor, color_valor=(241, 245, 249)):
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(50, 8, label, ln=False)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(*color_valor)
+        pdf.multi_cell(0, 8, str(valor))
+
+    fila("Cliente:", trabajo.cliente.nombre)
+    fila("Descripcion:", trabajo.descripcion)
+    fila("Fecha:", trabajo.fecha.strftime("%d/%m/%Y"))
+    monto_fmt = f"${trabajo.monto:,.0f}".replace(",", ".")
+    fila("Monto:", monto_fmt)
+    estado_txt = "Cobrado" if trabajo.pagado else "Pendiente de pago"
+    estado_color = (34, 197, 94) if trabajo.pagado else (239, 68, 68)
+    fila("Estado:", estado_txt, estado_color)
+    pdf.ln(6)
+
+    # Footer
+    pdf.set_line_width(0.3)
+    pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(0, 6, f"Generado el {ahora_local().strftime('%d/%m/%Y %H:%M')} hs", align="C")
+
+    return bytes(pdf.output())
+
+
+@app.route("/pdf/<int:trabajo_id>")
+def descargar_pdf(trabajo_id):
+    from flask import send_file
+    import io
+    session = get_session()
+    try:
+        t = session.query(Trabajo).options(
+            joinedload(Trabajo.cliente)).filter(Trabajo.id == trabajo_id).first()
+        if not t:
+            return jsonify({"error": "not found"}), 404
+        pdf_bytes = generar_pdf_trabajo(t)
+        nombre_archivo = f"trabajo_{t.cliente.nombre.replace(' ', '_')}_{t.fecha.strftime('%Y%m%d')}.pdf"
+    finally:
+        session.close()
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=nombre_archivo
+    )
+
+
+@app.route("/whatsapp/<int:trabajo_id>", methods=["POST"])
+def enviar_whatsapp(trabajo_id):
+    import requests as req
+    instance_id = os.environ.get("GREEN_API_INSTANCE_ID")
+    api_token = os.environ.get("GREEN_API_TOKEN")
+    if not instance_id or not api_token:
+        return jsonify({"error": "Green API no configurada. Setear GREEN_API_INSTANCE_ID y GREEN_API_TOKEN."}), 500
+
+    session = get_session()
+    try:
+        t = session.query(Trabajo).options(
+            joinedload(Trabajo.cliente)).filter(Trabajo.id == trabajo_id).first()
+        if not t:
+            return jsonify({"error": "trabajo not found"}), 404
+        telefono = t.cliente.telefono
+        if not telefono:
+            return jsonify({"error": "El cliente no tiene teléfono cargado."}), 400
+
+        # Normalizar número Argentina: 549XXXXXXXXXX@c.us
+        phone = telefono.strip().replace("+", "").replace(" ", "").replace("-", "")
+        if not phone.startswith("54"):
+            phone = "549" + phone
+        elif phone.startswith("54") and not phone.startswith("549"):
+            phone = "549" + phone[2:]
+        chat_id = f"{phone}@c.us"
+
+        pdf_bytes = generar_pdf_trabajo(t)
+        nombre_archivo = f"trabajo_{t.cliente.nombre.replace(' ', '_')}_{t.fecha.strftime('%Y%m%d')}.pdf"
+        caption = f"Resumen de trabajo - {t.descripcion[:80]}"
+
+        url = f"https://api.greenapi.com/waInstance{instance_id}/sendFileByUpload/{api_token}"
+        response = req.post(url,
+            data={"chatId": chat_id, "caption": caption, "fileName": nombre_archivo},
+            files={"file": (nombre_archivo, pdf_bytes, "application/pdf")},
+            timeout=30
+        )
+        resp_data = response.json() if response.content else {}
+        if response.status_code == 200 and resp_data.get("idMessage"):
+            return jsonify({"ok": True})
+        return jsonify({"error": f"Green API error: {resp_data}"}), 500
+    finally:
+        session.close()
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
