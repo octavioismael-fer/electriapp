@@ -516,12 +516,13 @@ def generar_pdf_trabajo(trabajo):
 
     # Header
     pdf.set_font("Helvetica", "B", 22)
-    pdf.set_text_color(245, 158, 11)  # amber
-    pdf.cell(0, 12, "ElectriApp", ln=True, align="C")
+    pdf.set_text_color(245, 158, 11)
+    pdf.cell(0, 12, "ElectriApp", align="C")
+    pdf.ln(12)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(100, 116, 139)
-    pdf.cell(0, 6, "Resumen de Trabajo", ln=True, align="C")
-    pdf.ln(8)
+    pdf.cell(0, 6, "Resumen de Trabajo", align="C")
+    pdf.ln(14)
 
     # Linea separadora
     pdf.set_draw_color(245, 158, 11)
@@ -532,7 +533,7 @@ def generar_pdf_trabajo(trabajo):
     def fila(label, valor, color_valor=(241, 245, 249)):
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(100, 116, 139)
-        pdf.cell(50, 8, label, ln=False)
+        pdf.cell(50, 8, label)
         pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(*color_valor)
         pdf.multi_cell(0, 8, str(valor))
