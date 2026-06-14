@@ -561,6 +561,7 @@ def generar_pdf_trabajo(trabajo):
 
 @app.route("/pdf/<int:trabajo_id>")
 def descargar_pdf(trabajo_id):
+    import traceback
     from flask import send_file
     import io
     session = get_session()
@@ -571,6 +572,8 @@ def descargar_pdf(trabajo_id):
             return jsonify({"error": "not found"}), 404
         pdf_bytes = generar_pdf_trabajo(t)
         nombre_archivo = f"trabajo_{t.cliente.nombre.replace(' ', '_')}_{t.fecha.strftime('%Y%m%d')}.pdf"
+    except Exception:
+        return jsonify({"error": traceback.format_exc()}), 500
     finally:
         session.close()
     return send_file(
