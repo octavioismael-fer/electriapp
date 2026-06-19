@@ -356,6 +356,10 @@ def api_tareas_pendientes():
     session.close()
     return jsonify(result)
 
+@app.route("/configuracion")
+def configuracion():
+    return render_template("configuracion.html")
+
 @app.route("/sw.js")
 def service_worker():
     from flask import send_from_directory
@@ -446,6 +450,15 @@ def api_subscribe():
         else:
             session.add(PushSubscription(endpoint=endpoint, p256dh=p256dh, auth=auth))
         session.commit()
+    finally:
+        session.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/notificacion-prueba", methods=["POST"])
+def api_notificacion_prueba():
+    session = get_session()
+    try:
+        _enviar_push_a_todos(session, "🔔 Prueba — ElectriApp", "Las notificaciones funcionan correctamente.")
     finally:
         session.close()
     return jsonify({"ok": True})

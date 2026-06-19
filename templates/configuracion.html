@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="topbar">
+  <a href="/" class="back-btn" style="font-size:20px; line-height:1;">←</a>
+  <span class="logo">⚙️</span>
+  <h1>Configuración</h1>
+</div>
+
+<div class="content">
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-label">Estado de notificaciones</div>
+    <div id="estado-notif" style="font-size:16px; font-weight:700; margin-top:6px; color: var(--subtexto);">
+      Verificando…
+    </div>
+  </div>
+
+  <button id="btn-activar" class="btn btn-primary btn-block" style="margin-bottom:12px; font-size:17px; padding:16px;">
+    🔔 Activar notificaciones
+  </button>
+
+  <button id="btn-probar" class="btn btn-block" style="background:var(--surface2); color:var(--texto); margin-bottom:12px; font-size:15px; padding:14px;" disabled>
+    📣 Probar notificación ahora
+  </button>
+
+  <a href="/" class="btn btn-block" style="background:var(--surface); color:var(--subtexto); border:1px solid var(--surface2); font-size:15px; padding:14px;">
+    ← Volver
+  </a>
+
+  <div id="msg" style="margin-top:16px; font-size:13px; color:var(--subtexto); text-align:center; min-height:20px;"></div>
+
+</div>
+
+<script>
+const VAPID_PUBLIC_KEY = '{{ vapid_public_key }}';
+
+function urlBase64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const base64 = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+const elEstado = document.getElementById('estado-notif');
+const btnActivar = document.getElementById('btn-activar');
+const btnProbar = document.getElementById('btn-probar');
+const elMsg = document.getElementById('msg');
+
+function setMsg(txt) { elMsg.textContent = txt; }
+
+function actualizarEstado() {
+  if (!('Notification' in window)) {
+    elEstado.textContent = '❌ No soportado en este navegador';
+    elEstado.style.color = 'var(--error)';
+    btnActivar.disabled = true;
+    return;
+  }
+  const p = Notification.permission;
+  if (p === 'granted') {
+    elEstado.textContent = '✅ Concedido';
+    elEstado.style.color = 'var(--ok)';
+    btnActivar.textContent = '🔔 Notificaciones activas';
+    btnActivar.disabled = true;
+    btnProbar.disabled = false;
+  } else if (p === 'denied') {
+    elEstado.textContent = '🚫 Bloqueado — habilitá desde ajustes del sistema';
+    elEstado.style.color = 'var(--error)';
+    btnActivar.disabled = true;
+  } else {
+    elEstado.textContent = '⏳ No pedido aún';
+    elEstado.style.color = 'var(--subtexto)';
+  }
+}
+
+actualizarEstado();
+
+btnActivar.addEventListener('click', async () => {
+  if (!('serviceWorker' in navigator)) {
+    setMsg('Service Worker no disponible. En iOS: instalá la app desde Safari → Agregar a inicio.');
+    return;
+  }
+  btnActivar.disabled = true;
+  setMsg('Solicitando permiso…');
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      actualizarEstado();
+      setMsg('Permiso no concedido.');
+      btnActivar.disabled = false;
+      return;
+    }
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub.toJSON())
+    });
+    actualizarEstado();
+    setMsg('Suscripción registrada correctamente.');
+  } catch(e) {
+    btnActivar.disabled = false;
+    actualizarEstado();
+    setMsg('Error: ' + e.message);
+  }
+});
+
+btnProbar.addEventListener('click', async () => {
+  btnProbar.disabled = true;
+  setMsg('Enviando notificación de prueba…');
+  try {
+    const res = await fetch('/api/notificacion-prueba', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      setMsg('Notificación enviada. Debería aparecer en segundos.');
+    } else {
+      setMsg('Error del servidor: ' + (data.error || 'desconocido'));
+    }
+  } catch(e) {
+    setMsg('Error: ' + e.message);
+  }
+  setTimeout(() => { btnProbar.disabled = false; }, 3000);
+});
+</script>
+{% endblock %}
