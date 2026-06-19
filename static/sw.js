@@ -22,8 +22,6 @@ self.addEventListener('push', e => {
       body: cuerpo,
       icon: '/static/icon-192.png',
       badge: '/static/icon-192.png',
-      vibrate: [200, 100, 200, 100, 200],
-      requireInteraction: true,
     })
   );
 });

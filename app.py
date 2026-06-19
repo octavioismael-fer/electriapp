@@ -439,9 +439,12 @@ def api_subscribe():
 
     session = get_session()
     try:
-        # Reemplaza todas las suscripciones anteriores con la nueva
-        session.query(PushSubscription).delete()
-        session.add(PushSubscription(endpoint=endpoint, p256dh=p256dh, auth=auth))
+        existing = session.query(PushSubscription).filter_by(endpoint=endpoint).first()
+        if existing:
+            existing.p256dh = p256dh
+            existing.auth = auth
+        else:
+            session.add(PushSubscription(endpoint=endpoint, p256dh=p256dh, auth=auth))
         session.commit()
     finally:
         session.close()
